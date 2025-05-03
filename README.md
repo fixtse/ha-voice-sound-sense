@@ -2,29 +2,55 @@
 
 Smart volume control for your Home Assistant Voice PE device that automatically adjusts based on ambient sound levels. Never be startled by your voice assistant being too loud at night or struggle to hear it in a noisy environment.
 
-![Dynamic Volume Controls](images/controls.png)
+## Table of Contents
+- [Features](#features)
+- [Installation](#installation)
+  - [Method 1: Using ESPHome Packages](#method-1-using-esphome-packages-recommended)
+  - [Method 2: Manual Installation](#method-2-manual-installation)
+- [Technical Details](#technical-details)
+- [License](#license)
 
 ## Features
 
-- **Ambient Sound Detection**: Uses the built-in microphones to measure background noise levels
-- **Dynamic Volume Adjustment**: Automatically scales volume based on ambient noise
-- **Customizable Settings**: 
-  - Anchor Volume: Base volume level when it's quiet
-  - Strength: How aggressively it scales up in noisy situations
-  - Simple toggle to enable/disable
-- **Useful Sensors**: Three sensor entities to monitor sound levels
-  - Raw peak detection values
-  - Linear percentage scaling
-  - Exponential scaling to put quieter levels in a more useful range
+The SoundSense package extends the dynamic volume capabilities with advanced sound detection features:
 
-![Ambient Sound Sensors](images/sensors.png)
-![Sound Level Graph](images/graph.png)
+### Sound Detection States
+
+SoundSense analyzes the ambient sound and classifies it into five different states:
+
+- **Silence**: Prolonged period (>15s) of very low ambient noise
+- **Quieting**: Recent transition to low ambient noise
+- **Active**: Normal ambient sound activity
+- **Noise**: Sudden spikes in sound levels
+- **Presence**: Sustained elevated sound levels, indicating ongoing activity or presence
+
+### Configurable Controls
+
+SoundSense provides three configurable controls:
+
+1. **Dynamic Minimum Volume** (0-100%): Sets the base volume level when ambient noise is minimal
+2. **Dynamic Volume Level** (0-10): Controls how aggressively volume scales up with ambient noise
+3. **Presence Threshold** (0-100 dB): Sets the sound level that triggers "presence" detection
+
+### Optimized Sound Processing
+
+- Efficient sound level calculation using logarithmic dB conversion
+- Smart hysteresis to prevent rapid volume fluctuations
+- Volume adjustments occur only when necessary, with smooth transitions
+- Processing pauses during media playback to avoid feedback loops
 
 ## Installation
 
 ### Method 1: Using ESPHome Packages (Recommended)
 
-1. Add this package to your ESPHome configuration:
+If you want to use the SoundSense package, add the following to your configuration:
+
+```yaml
+packages:
+  SoundSense: github://fixtse/ha-voice-sound-sense/sound_sense.yaml
+```
+
+Example integration with your existing configuration:
 
 ```yaml
 substitutions:
@@ -34,8 +60,8 @@ substitutions:
 packages:
   # Official ESPHome Home Assistant Voice PE package
   Nabu Casa.Home Assistant Voice PE: github://esphome/home-assistant-voice-pe/home-assistant-voice.yaml
-  # Dynamic Volume package
-  Jaapp.DynamicVolume: github://jaapp/ha-voice-dynamic-volume/dynamic-volume.yaml
+  # SoundSense package
+  SoundSense: github://fixtse/ha-voice-sound-sense/sound_sense.yaml
 
 # Your existing API configuration
 api:
@@ -48,39 +74,32 @@ wifi:
   password: !secret wifi_password
 ```
 
-2. Install the configuration via ESPHome Device Builder
-
 ### Method 2: Manual Installation
 
-If you prefer not to use packages, you can copy the full configuration from the [dynamic-volume.yaml](dynamic-volume.yaml) file and add it to your existing ESPHome configuration.
+If you prefer not to use packages, you can copy the full configuration from the [sound_sense.yaml](sound_sense.yaml) file and add it to your existing ESPHome configuration.
 
-## Usage
+### Technical Details
 
-After installation, you'll find the new controls in your device's Configuration panel:
+SoundSense uses an advanced algorithm to:
 
-1. **Dynamic Volume**: Toggle switch to enable/disable the feature
-2. **Dyn. Vol. Anchor**: Base volume level
-3. **Dyn. Vol. Strength**: How aggressively volume increases with ambient noise
+1. Sample microphone data in small buffers
+2. Calculate the average absolute amplitude
+3. Convert to decibels using a logarithmic lookup table
+4. Apply state detection logic based on configurable thresholds
+5. Calculate dynamic volume adjustments based on ambient conditions
+6. Apply hysteresis and smoothing for stable volume transitions
 
-## Technical Details
-
-The system works by:
-1. Sampling the microphone during idle periods
-2. Calculating peak amplitude values
-3. Scaling these values to a percentage
-4. Applying an exponential curve to better represent human perception
-5. Adjusting volume based on the calculated ambient noise level
-
-Note: Measurements are paused during media playback to avoid feedback loops.
-
-## Bonus Feature
-
-This configuration also serves as a presence detection proxy - especially useful in homes with children or active areas, as the ambient sound level spikes with activity.
-
-## Contributing
-
-Contributions welcome! Feel free to submit issues or pull requests.
+The system is designed to be resource-efficient and responsive, providing a natural listening experience by keeping your device's volume at an optimal level for the current environment.
 
 ## License
 
-[MIT License](LICENSE)
+Shield: [![CC BY-NC-SA 4.0][cc-by-nc-sa-shield]][cc-by-nc-sa]
+
+This work is licensed under a
+[Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License][cc-by-nc-sa].
+
+[![CC BY-NC-SA 4.0][cc-by-nc-sa-image]][cc-by-nc-sa]
+
+[cc-by-nc-sa]: http://creativecommons.org/licenses/by-nc-sa/4.0/
+[cc-by-nc-sa-image]: https://licensebuttons.net/l/by-nc-sa/4.0/88x31.png
+[cc-by-nc-sa-shield]: https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey.svg
