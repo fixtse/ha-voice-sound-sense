@@ -36,7 +36,7 @@ number:
     min_value: 0
     max_value: 10
     step: 1
-    initial_value: 3.0
+    initial_value: 5
     restore_value: true
     optimistic: true
     icon: "mdi:volume-plus"    
@@ -260,7 +260,7 @@ text_sensor:
         } else {
           continuous_counter = 0;
         }    
-        
+
         if (current_time - noise_timestamp <= NOISE_TIMEOUT_MS) {
           return set_state("noise");
         }        
@@ -289,7 +289,7 @@ script:
           if (ambient_level <= 0) {
             low_reading_count++;
             
-            if (low_reading_count >= 2 && abs(id(last_dynamic_volume_calculation) - min_volume) > 0.01f) {
+            if (low_reading_count >= 4 && abs(id(last_dynamic_volume_calculation) - min_volume) > 0.01f) {
               id(last_dynamic_volume_calculation) = min_volume;
               id(external_media_player)
                 ->make_call()
@@ -317,7 +317,7 @@ script:
           }
           
           // Calculate boost
-          int16_t boost_fp = (normalized_level_fp * (int)(noise_response * 50)) / 100;
+          int16_t boost_fp = (normalized_level_fp * (int)(noise_response * 25)) / 100;
           
           // Calculate new volume
           int16_t min_volume_fp = min_volume * 100;
@@ -332,8 +332,12 @@ script:
           // Only update if changed more than threshold (1% change required)
           if (abs(new_volume - prev_volume) > 0.01f) {
             // Smoothing to avoid abrupt volume changes
-            if (prev_volume >= 0) {
-              new_volume = prev_volume * 0.7f + new_volume * 0.3f;
+            if (prev_volume >= 0) {              
+              if (new_volume < prev_volume) {               
+                new_volume = prev_volume * 0.9f + new_volume * 0.1f;
+              } else {                
+                new_volume = prev_volume * 0.7f + new_volume * 0.3f;
+              }
             }
             
             prev_volume = new_volume;
