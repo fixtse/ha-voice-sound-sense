@@ -1,4 +1,4 @@
-# Home Assistant Voice Dynamic Volume
+# Home Assistant Voice SoundSense
 
 Smart volume control for your Home Assistant Voice PE device that automatically adjusts based on ambient sound levels. Never be startled by your voice assistant being too loud at night or struggle to hear it in a noisy environment.
 

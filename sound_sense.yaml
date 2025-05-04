@@ -92,8 +92,22 @@ sensor:
       - sliding_window_moving_average:
           window_size: 3
           send_every: 2
-      - throttle_average: 2s
-      - filter_out: NaN
+      - throttle_average: 2s      
+      - lambda: |-
+          if (std::isnan(x)) return id(ambient_sound_level).state;
+          static float last_valid = 0;
+          static uint8_t reject_count = 0;
+          if (x < (last_valid - 10) && id(last_dynamic_volume_calculation) > 0) {
+            if (reject_count < 3) {
+              reject_count++;
+              return last_valid;
+            }            
+            reject_count = 0;
+          } else {
+            reject_count = 0;
+          }
+          last_valid = x;
+          return x;
     lambda: |-
       static const char *const TAG = "ambient_sound";
       static const size_t INPUT_BUFFER_SIZE = 256;
@@ -144,17 +158,25 @@ sensor:
       
       uint32_t avg_abs = sum_abs / (samples_read / 5);
       
-       // Use a simple logarithmic lookup for dB conversion
+      // Using binary search for faster dB lookup
       static const uint8_t db_lookup[] = {
         0, 20, 32, 40, 46, 52, 56, 60, 64, 68, 72, 74, 76, 80, 82, 84,
         86, 88, 90, 92, 94, 96, 98, 100
-      };
+      };      
       
-      uint8_t index = 0;
-      uint32_t threshold = 1;
-      while (index < sizeof(db_lookup) - 1 && avg_abs > threshold) {
-        threshold <<= 1;
-        index++;
+      uint8_t low = 0;
+      uint8_t high = sizeof(db_lookup) - 1;
+      uint8_t index = high / 2;
+      uint32_t threshold = 1 << index;
+      
+      while (low < high) {
+        if (avg_abs > threshold) {
+          low = index + 1;
+        } else {
+          high = index;
+        }
+        index = (low + high) / 2;
+        threshold = 1 << index;
       }
       
       float db_value = index < sizeof(db_lookup) ? db_lookup[index] : db_lookup[sizeof(db_lookup) - 1];
