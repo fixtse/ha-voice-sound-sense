@@ -30,6 +30,7 @@ number:
     initial_value: 15
     restore_value: true
     optimistic: true
+    unit_of_measurement: "%"
     icon: "mdi:volume-medium"
     entity_category: config
     
@@ -51,7 +52,7 @@ number:
     min_value: 0
     max_value: 100
     step: 1
-    initial_value: 40
+    initial_value: 30
     restore_value: true
     mode: box
     optimistic: true
@@ -233,7 +234,7 @@ text_sensor:
       last_level = ambient_level;
 
       // Helper function to set state only if it has changed
-      auto set_state = [&last_state](const std::string& new_state) -> optional<std::string> {
+      auto set_state = [](const std::string& new_state) -> optional<std::string> {
         if (new_state != last_state) {
           last_state = new_state;
           return new_state;
@@ -306,10 +307,11 @@ script:
           float min_volume = id(dynamic_min_volume).state / 100.0f;          
           float min_sound_db = 20.0f; // Minimum sound level in dB
 
-          // Only adjust volume if ambient level exceeds floor
+          static uint8_t low_reading_count = 0;
           if (ambient_level <= 0) {
-                        
-            if (abs(id(last_dynamic_volume_calculation) - min_volume) > 0.01f) {
+            low_reading_count++;
+            
+            if (low_reading_count >= 2 && abs(id(last_dynamic_volume_calculation) - min_volume) > 0.01f) {
               id(last_dynamic_volume_calculation) = min_volume;
               id(external_media_player)
                 ->make_call()
@@ -317,6 +319,8 @@ script:
                 .perform();              
             }
             return;
+          } else {
+            low_reading_count = 0;
           }
 
           float noise_response = id(dynamic_volume_level).state;
