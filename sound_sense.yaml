@@ -12,10 +12,6 @@ globals:
     type: float
     restore_value: no
     initial_value: '0'
-  - id: sound_detection
-    type: uint8_t
-    restore_value: no
-    initial_value: '0'  # 0=unknown, 1=silence, 2=quieting, 3=active, 4=noise, 5=presence
 
 preferences:
   flash_write_interval: 30min
@@ -195,17 +191,10 @@ text_sensor:
     icon: "mdi:waveform"
     update_interval: 2s
     lambda: |-
-      float ambient_level = id(ambient_sound_level).state;
-      static const uint8_t SOUND_DETECTION_UNKNOWN = 0;
-      static const uint8_t SOUND_DETECTION_SILENCE = 1;
-      static const uint8_t SOUND_DETECTION_QUIETING = 2;
-      static const uint8_t SOUND_DETECTION_ACTIVE = 3;
-      static const uint8_t SOUND_DETECTION_NOISE = 4;
-      static const uint8_t SOUND_DETECTION_PRESENCE = 5;
+      float ambient_level = id(ambient_sound_level).state;             
       
       // Check for NaN
       if (std::isnan(ambient_level)) {
-        id(sound_detection) = SOUND_DETECTION_UNKNOWN;
         return {"unknown"};
       }
             
@@ -219,15 +208,9 @@ text_sensor:
       const uint8_t SILENCE_THRESHOLD = 5;
       const uint8_t NOISE_THRESHOLD = 18;
       const uint8_t CONTINUOUS_COUNT_TARGET = 8; // 8 counts * 2s update = 16s
-      const uint16_t NOISE_TIMEOUT_MS = 5000; 
+      const uint16_t NOISE_TIMEOUT_MS = 10000;
       
-      uint32_t current_time = millis();
-      
-      // Handle timeout for noise state
-      if (id(sound_detection) == SOUND_DETECTION_NOISE && 
-          current_time - noise_timestamp > NOISE_TIMEOUT_MS) {
-        id(sound_detection) = SOUND_DETECTION_ACTIVE;
-      }
+      uint32_t current_time = millis();     
 
       // Save the last level for detecting sudden changes
       float temp_last_level = last_level;
@@ -253,18 +236,16 @@ text_sensor:
         continuous_counter = 0;
         
         if (current_time - silence_start_time >= 15000) {
-          id(sound_detection) = SOUND_DETECTION_SILENCE;
           return set_state("silence");
         } else {
-          id(sound_detection) = SOUND_DETECTION_QUIETING;
           return set_state("quieting");
         }
       } else {
         // Non-silence states (active, noise, presence)
         was_silent = false;
         
+        // Detect sudden noise spike and record timestamp
         if (temp_last_level < SILENCE_THRESHOLD && ambient_level >= NOISE_THRESHOLD) {
-          id(sound_detection) = SOUND_DETECTION_NOISE;
           noise_timestamp = current_time;
           return set_state("noise");
         }        
@@ -274,19 +255,16 @@ text_sensor:
             continuous_counter++;
           
           if (continuous_counter >= CONTINUOUS_COUNT_TARGET) {
-            id(sound_detection) = SOUND_DETECTION_PRESENCE;
             return set_state("presence");
           }
         } else {
           continuous_counter = 0;
-        }        
+        }    
         
-        if (id(sound_detection) == SOUND_DETECTION_NOISE && 
-            current_time - noise_timestamp <= NOISE_TIMEOUT_MS) {
+        if (current_time - noise_timestamp <= NOISE_TIMEOUT_MS) {
           return set_state("noise");
         }        
         
-        id(sound_detection) = SOUND_DETECTION_ACTIVE;
         return set_state("active");
       }
 
