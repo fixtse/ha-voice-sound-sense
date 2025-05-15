@@ -1,6 +1,7 @@
 <a name="readme-top"></a>
 [![maintained](https://img.shields.io/maintenance/yes/2025.svg)](#) [![maintainer](https://img.shields.io/badge/maintainer-%20%40fixtse-blue.svg)](https://github.com/fixtse)
 
+<a href='https://ko-fi.com/M4M6P9A5P' target='_blank'><img height='36' style='border:0px;height:36px;' src='https://storage.ko-fi.com/cdn/kofi2.png?v=6' border='0' alt='Buy Me a Coffee at ko-fi.com' /></a>
 
 # Home Assistant Voice SoundSense
 
@@ -10,8 +11,6 @@
   - [Method 1: Using ESPHome Packages](#method-1-using-esphome-packages-recommended)
   - [Method 2: Manual Installation](#method-2-manual-installation)
 - [Technical Details](#technical-details)
-- [License](#license)
-
 
 ## Features
 
