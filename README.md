@@ -1,6 +1,8 @@
-# Home Assistant Voice SoundSense
+<a name="readme-top"></a>
+[![maintained](https://img.shields.io/maintenance/yes/2025.svg)](#) [![maintainer](https://img.shields.io/badge/maintainer-%20%40fixtse-blue.svg)](https://github.com/fixtse)
 
-Smart volume control for your Home Assistant Voice PE device that automatically adjusts based on ambient sound levels. Never be startled by your voice assistant being too loud at night or struggle to hear it in a noisy environment.
+
+# Home Assistant Voice SoundSense
 
 ## Table of Contents
 - [Features](#features)
@@ -10,9 +12,20 @@ Smart volume control for your Home Assistant Voice PE device that automatically 
 - [Technical Details](#technical-details)
 - [License](#license)
 
+
 ## Features
 
-The SoundSense package extends the dynamic volume capabilities with advanced sound detection features:
+<div align="center">
+  <table>
+    <tr>
+      <td><img src="images/configuration.png" alt="Configuration example" style="border-radius: 30px;"></td>
+      <td><img src="images/sensors.png" alt="Sensors example" style="border-radius: 30px;"></td>
+    </tr>
+  </table>
+</div>
+
+The SoundSense package extends the Dynamic Volume Capabilities with Sound detection features.
+The system is designed to be resource-efficient and responsive, providing a natural listening experience by keeping your device's volume at an optimal level for the current environment.
 
 ### Sound Detection States
 
@@ -38,6 +51,8 @@ SoundSense provides three configurable controls:
 - Smart hysteresis to prevent rapid volume fluctuations
 - Volume adjustments occur only when necessary, with smooth transitions
 - Processing pauses during media playback to avoid feedback loops
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ## Installation
 
@@ -78,7 +93,9 @@ wifi:
 
 If you prefer not to use packages, you can copy the full configuration from the [sound_sense.yaml](sound_sense.yaml) file and add it to your existing ESPHome configuration.
 
-### Technical Details
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+## Technical Details
 
 SoundSense uses an advanced algorithm to:
 
@@ -89,7 +106,7 @@ SoundSense uses an advanced algorithm to:
 5. Calculate dynamic volume adjustments based on ambient conditions
 6. Apply hysteresis and smoothing for stable volume transitions
 
-The system is designed to be resource-efficient and responsive, providing a natural listening experience by keeping your device's volume at an optimal level for the current environment.
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ## License
 
@@ -103,3 +120,5 @@ This work is licensed under a
 [cc-by-nc-sa]: http://creativecommons.org/licenses/by-nc-sa/4.0/
 [cc-by-nc-sa-image]: https://licensebuttons.net/l/by-nc-sa/4.0/88x31.png
 [cc-by-nc-sa-shield]: https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey.svg
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
