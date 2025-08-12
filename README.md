@@ -46,10 +46,12 @@ SoundSense provides three configurable controls:
 
 ### Optimized Sound Processing
 
-- Efficient sound level calculation using logarithmic dB conversion
-- Smart hysteresis to prevent rapid volume fluctuations
-- Volume adjustments occur only when necessary, with smooth transitions
-- Processing pauses during media playback to avoid feedback loops
+- **Real-time audio processing** using microphone `on_data` triggers for maximum efficiency
+- **Efficient sound level calculation** using logarithmic dB conversion
+- **Smart hysteresis** to prevent rapid volume fluctuations
+- Volume adjustments occur **only when necessary**, with smooth transitions
+- Processing **pauses during media playback** to avoid feedback loops
+- **Microphone trigger approach** processes audio data as it arrives rather than polling
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -64,6 +66,19 @@ packages:
   SoundSense: github://fixtse/ha-voice-sound-sense/sound_sense.yaml
 ```
 
+Then you need to add the microphone trigger to call the sound processing script. Add this to your microphone configuration:
+
+```yaml
+microphone:
+  - platform: i2s_audio  # or your microphone platform
+    id: i2s_mics
+    # ... your existing microphone config ...
+    on_data:
+      - script.execute:
+          id: process_audio_data
+          audio_data: !lambda return x;
+```
+
 Example integration with your existing configuration:
 
 ```yaml
@@ -73,7 +88,7 @@ substitutions:
 
 packages:
   # Official ESPHome Home Assistant Voice PE package
-  Nabu Casa.Home Assistant Voice PE: github://esphome/home-assistant-voice-pe/home-assistant-voice.yaml
+  Voice PE: github://esphome/home-assistant-voice-pe/home-assistant-voice.yaml
   # SoundSense package
   SoundSense: github://fixtse/ha-voice-sound-sense/sound_sense.yaml
 
@@ -86,11 +101,33 @@ api:
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
+
+# Add microphone trigger for sound processing
+microphone:
+  - platform: i2s_audio
+    id: i2s_mics
+    # ... your existing microphone configuration ...
+    on_data:
+      - script.execute:
+          id: process_audio_data
+          audio_data: !lambda return x;
 ```
 
 ### Method 2: Manual Installation
 
 If you prefer not to use packages, you can copy the full configuration from the [sound_sense.yaml](sound_sense.yaml) file and add it to your existing ESPHome configuration.
+
+**Important**: You must also add the microphone trigger to your microphone configuration:
+
+```yaml
+microphone:
+  - platform: i2s_audio  # or your microphone platform
+    # ... your existing microphone config ...
+    on_data:
+      - script.execute:
+          id: process_audio_data
+          audio_data: !lambda return x;
+```
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -98,12 +135,32 @@ If you prefer not to use packages, you can copy the full configuration from the 
 
 SoundSense uses an advanced algorithm to:
 
-1. Sample microphone data in small buffers
-2. Calculate the average absolute amplitude
-3. Convert to decibels using a logarithmic lookup table
-4. Apply state detection logic based on configurable thresholds
-5. Calculate dynamic volume adjustments based on ambient conditions
-6. Apply hysteresis and smoothing for stable volume transitions
+1. **Trigger on audio data**: Uses ESPHome's `microphone.on_data` trigger for real-time processing
+2. **Calculate sound levels**: Convert audio samples to decibel measurements using logarithmic lookup
+3. **State detection**: Apply logic based on configurable thresholds for presence detection
+4. **Dynamic volume**: Calculate volume adjustments based on ambient conditions
+5. **Smooth transitions**: Apply hysteresis and smoothing for stable volume changes
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+## Troubleshooting
+
+### Common Issues
+
+**Q: The Ambient Sound Level sensor shows 0 or doesn't update**
+- Ensure you've added the `on_data` trigger to your microphone configuration
+- Verify the microphone is working in ESPHome logs
+
+**Q: Dynamic volume isn't working**
+- Make sure the Dynamic Volume switch is turned on in Home Assistant
+
+
+**Q: Sound detection states don't change**
+- Ensure the microphone is picking up audio (check Ambient Sound Level sensor)
+- Adjust the Presence Threshold setting in Home Assistant
+
+
+
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 

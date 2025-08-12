@@ -12,9 +12,11 @@ globals:
     type: float
     restore_value: no
     initial_value: '0'
-
-preferences:
-  flash_write_interval: 30min
+  # Sound sensing globals - updated by microphone trigger
+  - id: current_sound_level
+    type: float
+    restore_value: no
+    initial_value: '0.0'
 
 number:
   - platform: template
@@ -82,7 +84,7 @@ sensor:
     id: ambient_sound_level
     unit_of_measurement: "dB"
     accuracy_decimals: 1
-    update_interval: 2s
+    update_interval: 500ms
     icon: "mdi:microphone-outline"
     state_class: "measurement"
     filters:
@@ -91,10 +93,13 @@ sensor:
           send_every: 2
       - throttle_average: 2s      
       - lambda: |-
-          if (std::isnan(x)) return id(ambient_sound_level).state;
+          float current_level = id(current_sound_level);
+          if (std::isnan(current_level)) return id(ambient_sound_level).state;
+          
           static float last_valid = 0;
           static uint8_t reject_count = 0;
-          if (x < (last_valid - 10) && id(last_dynamic_volume_calculation) > 0) {
+          
+          if (current_level < (last_valid - 10) && last_valid > 0) {
             if (reject_count < 3) {
               reject_count++;
               return last_valid;
@@ -103,86 +108,10 @@ sensor:
           } else {
             reject_count = 0;
           }
-          last_valid = x;
-          return x;
+          last_valid = current_level;
+          return current_level;
     lambda: |-
-      static const char *const TAG = "ambient_sound";
-      static const size_t INPUT_BUFFER_SIZE = 256;
-      static int16_t input_buffer[INPUT_BUFFER_SIZE];
-      
-      // Don't measure when media is playing to avoid feedback
-      if (id(external_media_player)->state != media_player::MEDIA_PLAYER_STATE_IDLE) {
-        return id(ambient_sound_level).state;
-      }
-      
-      // Check if micro_wake_word is ready
-      if (!id(mww).is_ready()) {
-        return id(ambient_sound_level).state;
-      }
-
-      // Start mic if needed
-      if (!id(asr_mic)->is_running()) {
-        id(asr_mic)->start();
-        delay(50);
-      }
-
-      size_t bytes_read = id(asr_mic)->read_(
-        input_buffer, 
-        INPUT_BUFFER_SIZE * sizeof(int16_t),
-        0
-      );
-      
-      static uint8_t retry_count = 0;
-      if (bytes_read == 0) {
-        if (++retry_count > 3) {
-          retry_count = 0;
-          id(asr_mic)->stop();
-          delay(50);
-          id(asr_mic)->start();
-          delay(20);
-        }
-        return id(ambient_sound_level).state;
-      }
-      retry_count = 0;
-      
-      size_t samples_read = bytes_read / sizeof(int16_t);
-      
-      // Optimized loudness calculation
-      uint32_t sum_abs = 0;
-      for (size_t i = 0; i < samples_read; i += 4) {
-        sum_abs += abs(input_buffer[i]) >> 8;
-      }
-      
-      uint32_t avg_abs = sum_abs / (samples_read / 5);
-      
-      // Using binary search for faster dB lookup
-      static const uint8_t db_lookup[] = {
-        0, 20, 32, 40, 46, 52, 56, 60, 64, 68, 72, 74, 76, 80, 82, 84,
-        86, 88, 90, 92, 94, 96, 98, 100
-      };      
-      
-      uint8_t low = 0;
-      uint8_t high = sizeof(db_lookup) - 1;
-      uint8_t index = high / 2;
-      uint32_t threshold = 1 << index;
-      
-      while (low < high) {
-        if (avg_abs > threshold) {
-          low = index + 1;
-        } else {
-          high = index;
-        }
-        index = (low + high) / 2;
-        threshold = 1 << index;
-      }
-      
-      float db_value = index < sizeof(db_lookup) ? db_lookup[index] : db_lookup[sizeof(db_lookup) - 1];
-      
-      const float OFFSET = 15.0f;
-      float db_adjusted = db_value + OFFSET;
-      if (db_value == 0) db_adjusted = 0;
-      
-      return db_adjusted;
+      return id(current_sound_level);
 
 text_sensor: 
   - platform: template
@@ -269,6 +198,77 @@ text_sensor:
       }
 
 script:
+  # Script to process audio data from microphone trigger
+  - id: process_audio_data
+    parameters:
+      audio_data: "std::vector<uint8_t>"
+    then:
+      - lambda: |-
+          // Don't measure when media is playing to avoid feedback
+          if (id(external_media_player)->state != media_player::MEDIA_PLAYER_STATE_IDLE) {
+            return;
+          }
+          
+          // Check if micro_wake_word is ready
+          if (!id(mww).is_ready()) {
+            return;
+          }
+          
+          // Cast data to int16_t samples (assuming 32-bit samples, taking upper 16 bits)
+          const int32_t* samples_32 = reinterpret_cast<const int32_t*>(audio_data.data());
+          size_t sample_count = audio_data.size() / sizeof(int32_t);
+          
+          if (sample_count == 0) {
+            return;
+          }
+          
+          // Optimized loudness calculation - process every 4th sample for performance
+          uint64_t sum_abs = 0;
+          size_t processed_samples = 0;
+          
+          for (size_t i = 0; i < sample_count; i += 4) {
+            // Take upper 16 bits and convert to absolute value
+            int16_t sample_16 = (samples_32[i] >> 16) & 0xFFFF;
+            sum_abs += abs(sample_16) >> 8;  // Shift right to prevent overflow
+            processed_samples++;
+          }
+          
+          if (processed_samples == 0) {
+            return;
+          }
+          
+          uint32_t avg_abs = sum_abs / processed_samples;
+          
+          // Using binary search for faster dB lookup
+          static const uint8_t db_lookup[] = {
+            0, 20, 32, 40, 46, 52, 56, 60, 64, 68, 72, 74, 76, 80, 82, 84,
+            86, 88, 90, 92, 94, 96, 98, 100
+          };      
+          
+          uint8_t low = 0;
+          uint8_t high = sizeof(db_lookup) - 1;
+          uint8_t index = high / 2;
+          uint32_t threshold = 1 << index;
+          
+          while (low < high) {
+            if (avg_abs > threshold) {
+              low = index + 1;
+            } else {
+              high = index;
+            }
+            index = (low + high) / 2;
+            threshold = 1 << index;
+          }
+          
+          float db_value = index < sizeof(db_lookup) ? db_lookup[index] : db_lookup[sizeof(db_lookup) - 1];
+          
+          const float OFFSET = 15.0f;
+          float db_adjusted = db_value + OFFSET;
+          if (db_value == 0) db_adjusted = 0;
+          
+          // Store the calculated sound level in global variable
+          id(current_sound_level) = db_adjusted;
+
   - id: update_dynamic_volume
     mode: single
     then:
@@ -352,8 +352,3 @@ interval:
   - interval: 5s
     then:
       - script.execute: update_dynamic_volume
-
-logger:
-  level: INFO
-  logs:
-    dynamic_volume: INFO
