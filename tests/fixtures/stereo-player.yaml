@@ -1,0 +1,31 @@
+esphome:
+  name: soundsense-stereo-player
+substitutions:
+  sound_sense_player_id: living_room_player
+  sound_sense_channels: "2"
+  sound_sense_channel: "1"
+packages:
+  hardware: !include common.yaml
+  sound: !include ../../sound_sense.yaml
+microphone:
+  - platform: i2s_audio
+    id: stereo_microphone
+    i2s_audio_id: mic_bus
+    adc_type: external
+    i2s_din_pin: GPIO20
+    sample_rate: 16000
+    bits_per_sample: 32bit
+    channel: stereo
+    on_data:
+      - script.execute:
+          id: process_audio_data
+          audio_data: !lambda return x;
+media_player:
+  - platform: speaker
+    id: living_room_player
+    name: Speaker
+    announcement_pipeline:
+      speaker: panel_speaker
+      format: FLAC
+      sample_rate: 16000
+      num_channels: 1

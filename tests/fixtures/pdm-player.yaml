@@ -1,0 +1,36 @@
+esphome:
+  name: soundsense-pdm-player
+substitutions:
+  sound_sense_player_id: panel_media_player
+  sound_sense_sample_bits: "16"
+  sound_sense_capture_allowed: "!id(microphone_muted).state"
+packages:
+  hardware: !include common.yaml
+  sound: !include ../../sound_sense.yaml
+switch:
+  - platform: template
+    id: microphone_muted
+    optimistic: true
+microphone:
+  - platform: i2s_audio
+    id: panel_microphone
+    i2s_audio_id: mic_bus
+    adc_type: external
+    i2s_din_pin: GPIO20
+    pdm: true
+    sample_rate: 16000
+    bits_per_sample: 32bit
+    channel: right
+    on_data:
+      - script.execute:
+          id: process_audio_data
+          audio_data: !lambda return x;
+media_player:
+  - platform: speaker
+    id: panel_media_player
+    name: Speaker
+    announcement_pipeline:
+      speaker: panel_speaker
+      format: FLAC
+      sample_rate: 16000
+      num_channels: 1

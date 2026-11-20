@@ -1,0 +1,31 @@
+esphome:
+  name: soundsense-validation
+esp32:
+  board: esp32-s3-devkitc-1
+  flash_size: 16MB
+  framework:
+    type: esp-idf
+psram:
+  mode: octal
+  speed: 80MHz
+logger:
+api:
+wifi:
+  ssid: validation-only
+  password: validation-only-password
+i2s_audio:
+  - id: mic_bus
+    i2s_lrclk_pin: GPIO19
+    i2s_bclk_pin: GPIO18
+  - id: out_bus
+    i2s_lrclk_pin: GPIO16
+    i2s_bclk_pin: GPIO14
+speaker:
+  - platform: i2s_audio
+    id: panel_speaker
+    i2s_audio_id: out_bus
+    dac_type: external
+    i2s_dout_pin: GPIO15
+    sample_rate: 16000
+    bits_per_sample: 16bit
+    channel: mono

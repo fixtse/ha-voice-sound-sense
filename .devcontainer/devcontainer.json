@@ -1,0 +1,7 @@
+{
+  "name": "SoundSense ESPHome 2026.11.0",
+  "image": "ghcr.io/esphome/esphome:2026.11.0",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/config,type=bind",
+  "workspaceFolder": "/config",
+  "overrideCommand": true
+}

@@ -1,0 +1,22 @@
+esphome:
+  name: soundsense-speaker-only
+substitutions:
+  sound_sense_sample_bits: "24"
+  sound_sense_player_idle: "!id(panel_speaker).is_running()"
+  sound_sense_set_volume: "id(panel_speaker).set_volume(volume);"
+packages:
+  hardware: !include common.yaml
+  sound: !include ../../sound_sense.yaml
+microphone:
+  - platform: i2s_audio
+    id: pcm_microphone
+    i2s_audio_id: mic_bus
+    adc_type: external
+    i2s_din_pin: GPIO20
+    sample_rate: 16000
+    bits_per_sample: 24bit
+    channel: right
+    on_data:
+      - script.execute:
+          id: process_audio_data
+          audio_data: !lambda return x;
