@@ -11,11 +11,34 @@ substitutions:
   sound_sense_channels: "1"
   sound_sense_channel: "0"
   sound_sense_sample_stride: "4"
+  sound_sense_sample_timeout_ms: "5000"
   sound_sense_capture_allowed: "true"
   sound_sense_player_idle: "id(${sound_sense_player_id}).state == esphome::media_player::MEDIA_PLAYER_STATE_IDLE"
   sound_sense_set_volume: "id(${sound_sense_player_id}).make_call().set_volume(volume).perform();"
 
+esphome:
+  includes:
+    - <atomic>
+
+time:
+  - platform: homeassistant
+    id: sound_sense_clock
+
 globals:
+  # Audio callbacks may run on the microphone task. Atomics keep freshness
+  # metadata safe to read from the ESPHome main loop; never restore it at boot.
+  - id: sound_sense_last_sample_ms
+    type: std::atomic<uint32_t>
+    restore_value: false
+  - id: sound_sense_sample_seen
+    type: std::atomic<bool>
+    restore_value: false
+  - id: sound_sense_sample_recent
+    type: std::atomic<bool>
+    restore_value: false
+  - id: sound_sense_sample_sequence
+    type: std::atomic<uint32_t>
+    restore_value: false
   - id: dynamic_volume_enabled
     type: bool
     restore_value: yes
@@ -87,6 +110,20 @@ switch:
           // Reset to minimum volume when disabled
           id(sound_sense_apply_volume).execute(id(dynamic_min_volume).state / 100.0f);
 
+binary_sensor:
+  - platform: template
+    name: Sound measurement active
+    id: sound_measurement_active
+    icon: mdi:microphone-check
+    lambda: |-
+      static_assert(${sound_sense_sample_timeout_ms} > 0 && ${sound_sense_sample_timeout_ms} <= 60000,
+                    "SoundSense sample timeout must be 1..60000 milliseconds");
+      const bool fresh = (${sound_sense_player_idle}) && (${sound_sense_capture_allowed}) &&
+          id(sound_sense_sample_recent).load() &&
+          uint32_t(millis() - id(sound_sense_last_sample_ms).load()) < ${sound_sense_sample_timeout_ms};
+      if (!fresh) id(sound_sense_sample_recent).store(false);
+      return fresh;
+
 sensor:
   - platform: template
     name: "Ambient Sound Level"
@@ -103,7 +140,7 @@ sensor:
       - throttle_average: 2s      
       - lambda: |-
           float current_level = id(current_sound_level);
-          if (std::isnan(current_level)) return id(ambient_sound_level).state;
+          if (!id(sound_measurement_active).state || std::isnan(current_level)) return NAN;
           
           static float last_valid = 0;
           static uint8_t reject_count = 0;
@@ -120,9 +157,29 @@ sensor:
           last_valid = current_level;
           return current_level;
     lambda: |-
-      return id(current_sound_level);
+      return id(sound_measurement_active).state ? id(current_sound_level) : NAN;
 
-text_sensor: 
+text_sensor:
+  # ISO text avoids float32 epoch rounding, which would lose tens of seconds.
+  - platform: template
+    name: Last audio sample
+    id: sound_last_audio_sample
+    device_class: timestamp
+    icon: mdi:clock-check-outline
+    update_interval: 1s
+    lambda: |-
+      const auto now = id(sound_sense_clock).now();
+      if (!now.is_valid() || !id(sound_sense_sample_seen).load()) return {"unknown"};
+      static uint32_t sequence = 0;
+      static std::string timestamp;
+      const auto latest = id(sound_sense_sample_sequence).load();
+      if (latest != sequence || timestamp.empty()) {
+        auto captured = esphome::ESPTime::from_epoch_utc(
+            now.timestamp - uint32_t(millis() - id(sound_sense_last_sample_ms).load()) / 1000);
+        timestamp = captured.strftime("%Y-%m-%dT%H:%M:%SZ");
+        sequence = latest;
+      }
+      return {timestamp};
   - platform: template
     name: "Sound Detection"
     id: sound_detection_sensor
@@ -131,17 +188,28 @@ text_sensor:
     lambda: |-
       float ambient_level = id(ambient_sound_level).state;             
       
-      // Check for NaN
-      if (std::isnan(ambient_level)) {
-        return {"unknown"};
-      }
-            
       static uint32_t silence_start_time = 0;
       static uint8_t continuous_counter = 0;
       static float last_level = 0;
       static bool was_silent = true;
       static uint32_t noise_timestamp = 0;
       static std::string last_state = "";
+
+      // Invalid data breaks a continuous activity episode; a frozen high value
+      // must not mature into presence while muted, playing or disconnected.
+      const bool fresh = (${sound_sense_player_idle}) && (${sound_sense_capture_allowed}) &&
+          id(sound_sense_sample_recent).load() &&
+          uint32_t(millis() - id(sound_sense_last_sample_ms).load()) < ${sound_sense_sample_timeout_ms};
+      if (!fresh || !std::isfinite(ambient_level)) {
+        continuous_counter = 0;
+        silence_start_time = millis();
+        noise_timestamp = 0;
+        last_level = 0;
+        was_silent = true;
+        if (last_state == "unknown") return {};
+        last_state = "unknown";
+        return {"unknown"};
+      }
       
       const uint8_t SILENCE_THRESHOLD = 5;
       const uint8_t NOISE_THRESHOLD = 18;
@@ -261,6 +329,10 @@ script:
             return;
           }
           
+          id(sound_sense_last_sample_ms).store(millis());
+          id(sound_sense_sample_seen).store(true);
+          id(sound_sense_sample_recent).store(true);
+          id(sound_sense_sample_sequence).fetch_add(1);
           uint32_t avg_abs = sum_abs / processed_samples;
           
           // Using binary search for faster dB lookup
@@ -300,7 +372,8 @@ script:
           if (!id(dynamic_volume_enabled)) return;
       
           // Don't update volume when media is playing
-          if (!(${sound_sense_player_idle}) || !(${sound_sense_capture_allowed})) return;
+          if (!(${sound_sense_player_idle}) || !(${sound_sense_capture_allowed}) ||
+              !id(sound_measurement_active).state) return;
           
           float ambient_level = id(ambient_sound_level).state;
           if (std::isnan(ambient_level)) return;

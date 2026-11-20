@@ -15,6 +15,7 @@ microphone:
     i2s_din_pin: GPIO20
     sample_rate: 16000
     bits_per_sample: 24bit
+    mclk_multiple: 384
     channel: right
     on_data:
       - script.execute:

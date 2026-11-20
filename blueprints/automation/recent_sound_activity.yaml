@@ -1,0 +1,187 @@
+blueprint:
+  name: "SoundSense — Recent sound activity helper"
+  description: >-
+    Maintain a dedicated Toggle helper after sustained fresh sound and extend a dedicated Timer while it continues. Expiry means no recent qualifying sound, not an empty room. Startup clears the helper and cancels its timer.
+    Sound activity is not confirmed human occupancy. Require fresh SoundSense
+    measurement and timestamp entities. Persistence restarts after reload/restart.
+  domain: automation
+  author: fixtse
+  homeassistant:
+    min_version: "2026.11.0"
+  source_url: https://github.com/fixtse/ha-voice-sound-sense/blob/main/blueprints/automation/recent_sound_activity.yaml
+  input:
+    measurement_active:
+      name: Sound measurement active
+      description: Select SoundSense's measurement-active binary sensor, not a presence sensor.
+      selector:
+        entity:
+          filter:
+            domain: binary_sensor
+    last_sample:
+      name: Last audio sample
+      description: Select SoundSense's timestamp sensor. Unknown or stale timestamps block activity.
+      selector:
+        entity:
+          filter:
+            domain: sensor
+            device_class: timestamp
+    fresh_seconds:
+      name: Maximum sample age
+      default: 10
+      selector:
+        number:
+          min: 5
+          max: 60
+          unit_of_measurement: seconds
+          mode: box
+    ignored_appliances:
+      name: Ignore activity while these appliances are running
+      description: Active/on/running/cleaning states block detection. Unknown or unavailable entities also block it.
+      default: []
+      selector:
+        entity:
+          multiple: true
+    ignored_players:
+      name: Ignore activity while these media players are playing
+      description: Include TVs and nearby speakers. Unknown or unavailable players block detection too.
+      default: []
+      selector:
+        entity:
+          multiple: true
+          filter:
+            domain: media_player
+    sound_sensor:
+      name: Sound Detection
+      selector:
+        entity:
+          filter:
+            domain: sensor
+    activity_states:
+      name: Sound states to count as activity
+      default: [active, presence]
+      selector:
+        select:
+          multiple: true
+          options: [presence, active, noise]
+    persistence:
+      name: Continuous qualifying activity required
+      default:
+        seconds: 10
+      selector:
+        duration:
+    activity_helper:
+      name: Recent sound activity Toggle helper
+      description: Create a dedicated Toggle helper first. This automation owns it; do not use it as confirmed occupancy.
+      selector:
+        entity:
+          filter:
+            domain: input_boolean
+    hold_timer:
+      name: Activity expiry Timer helper
+      description: Create a dedicated Timer helper first. Do not share it with other automations.
+      selector:
+        entity:
+          filter:
+            domain: timer
+    hold_seconds:
+      name: Keep recent activity for
+      default: 300
+      selector:
+        number:
+          min: 30
+          max: 3600
+          step: 10
+          unit_of_measurement: seconds
+          mode: box
+trigger_variables:
+  measurement_entity: !input measurement_active
+  sample_entity: !input last_sample
+  fresh_seconds: !input fresh_seconds
+  ignored_appliances: !input ignored_appliances
+  ignored_players: !input ignored_players
+  sound_entity: !input sound_sensor
+  activity_states: !input activity_states
+variables:
+  measurement_entity: !input measurement_active
+  sample_entity: !input last_sample
+  fresh_seconds: !input fresh_seconds
+  ignored_appliances: !input ignored_appliances
+  ignored_players: !input ignored_players
+  sound_entity: !input sound_sensor
+  activity_states: !input activity_states
+  activity_helper: !input activity_helper
+  hold_timer: !input hold_timer
+  qualifies: >-
+    {% set age = as_timestamp(now()) - as_timestamp(states(sample_entity), 0) %}
+    {% set ns = namespace(ok=is_state(measurement_entity, 'on') and -2 <= age <= fresh_seconds|float) %}
+    {% for entity in ignored_appliances %}
+      {% if states(entity) in ['on', 'active', 'running', 'cleaning', 'returning', 'playing', 'buffering', 'unknown', 'unavailable'] %}
+        {% set ns.ok = false %}
+      {% endif %}
+    {% endfor %}
+    {% for entity in ignored_players %}
+      {% if states(entity) not in ['off', 'idle', 'paused', 'standby'] %}{% set ns.ok = false %}{% endif %}
+    {% endfor %}
+    {{ ns.ok and states(sound_entity) in activity_states }}
+triggers:
+  - trigger: template
+    id: qualified
+    value_template: >-
+      {% set age = as_timestamp(now()) - as_timestamp(states(sample_entity), 0) %}
+      {% set ns = namespace(ok=is_state(measurement_entity, 'on') and -2 <= age <= fresh_seconds|float) %}
+      {% for entity in ignored_appliances %}
+        {% if states(entity) in ['on', 'active', 'running', 'cleaning', 'returning', 'playing', 'buffering', 'unknown', 'unavailable'] %}
+          {% set ns.ok = false %}
+        {% endif %}
+      {% endfor %}
+      {% for entity in ignored_players %}
+        {% if states(entity) not in ['off', 'idle', 'paused', 'standby'] %}{% set ns.ok = false %}{% endif %}
+      {% endfor %}
+      {{ ns.ok and states(sound_entity) in activity_states }}
+    for: !input persistence
+  - trigger: time_pattern
+    id: refresh
+    seconds: "/10"
+  - trigger: homeassistant
+    id: startup
+    event: start
+  - trigger: event
+    id: expiry
+    event_type: timer.finished
+    event_data:
+      entity_id: !input hold_timer
+  - trigger: state
+    id: expiry
+    entity_id: !input hold_timer
+    to: idle
+conditions: []
+actions:
+  - choose:
+      - conditions: "{{ trigger.id == 'startup' }}"
+        sequence:
+          - action: input_boolean.turn_off
+            target:
+              entity_id: !input activity_helper
+          - action: timer.cancel
+            target:
+              entity_id: !input hold_timer
+      - conditions: >-
+          {{ qualifies and states(hold_timer) in ['idle', 'active', 'paused'] and
+             (trigger.id == 'qualified' or (trigger.id == 'refresh' and is_state(activity_helper, 'on') and is_state(hold_timer, 'active'))) }}
+        sequence:
+          - action: timer.start
+            target:
+              entity_id: !input hold_timer
+            data:
+              duration: !input hold_seconds
+          - action: input_boolean.turn_on
+            target:
+              entity_id: !input activity_helper
+      - conditions: "{{ not is_state(hold_timer, 'active') }}"
+        sequence:
+          - action: input_boolean.turn_off
+            target:
+              entity_id: !input activity_helper
+mode: queued
+max: 10
+max_exceeded: silent
